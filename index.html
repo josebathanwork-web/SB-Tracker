@@ -7,6 +7,9 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700&family=EB+Garamond:ital,wght@1,500&display=swap" rel="stylesheet">
+<script src="https://www.gstatic.com/firebasejs/10.12.5/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.5/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.5/firebase-firestore-compat.js"></script>
 <style>
 :root{--bg:#f4f4f2;--surface:#fff;--text:#0a0a0a;--muted:#5f5f5f;--line:#deded9;--accent:#c8102e;--blue:#c8102e;--btn:#c8102e;--good:#1f7a4d;--goodbg:#dff3e7;--warn:#9a5b00;--warnbg:#fdecc8;--bad:#a4161a;--badbg:#fbdcdc;--chip:#ece9e1;color-scheme:light}
 @media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#0a0a0a;--surface:#161616;--text:#f4f4f2;--muted:#a3a3a0;--line:#2b2b2b;--accent:#ff5a70;--blue:#ff5a70;--btn:#c8102e;--good:#6fd5a0;--goodbg:#14382a;--warn:#f3c26b;--warnbg:#3d2f10;--bad:#ff9a9d;--badbg:#431a1c;--chip:#242321;color-scheme:dark}}
@@ -50,7 +53,7 @@ th:first-child,td:first-child{text-align:left;position:sticky;left:0;background:
 th:first-child{background:var(--chip)}
 tr:last-child td{border-bottom:0}
 input[type=checkbox]{width:22px;height:22px;accent-color:var(--good);cursor:pointer}
-input[type=text],input[type=date],input[type=email],select,textarea{border:1px solid var(--line);background:var(--surface);border-radius:8px;padding:8px 10px;max-width:100%}
+input[type=text],input[type=date],input[type=email],input[type=password],select,textarea{border:1px solid var(--line);background:var(--surface);border-radius:8px;padding:8px 10px;max-width:100%}
 textarea{width:100%;min-height:110px}
 .cell{width:38px;height:34px;border-radius:7px;border:1px solid var(--line);background:var(--surface);font-weight:600;cursor:pointer}
 .cell.P{background:var(--goodbg);color:var(--good);border-color:var(--good)}
@@ -66,10 +69,35 @@ a{color:var(--blue)}
 .subtabs{display:flex;gap:6px;overflow-x:auto;margin:6px 0 14px}
 .subtabs button{flex:none;border:1px solid var(--line);background:var(--surface);color:var(--text);padding:6px 12px;border-radius:999px;font:500 .85rem Outfit,sans-serif;cursor:pointer}
 .subtabs button[aria-selected="true"]{background:var(--text);color:var(--bg);border-color:var(--text)}
+.gate{position:fixed;inset:0;z-index:50;background:var(--bg);overflow:auto;padding-top:env(safe-area-inset-top,0px)}
+.gate[hidden]{display:none}
+.gate main{max-width:440px;padding-top:20px}
+.gate form{display:grid;gap:6px;padding:18px}
+.gate label{font:600 .85rem Outfit,sans-serif;color:var(--muted);margin-top:6px}
+.gate input{width:100%;padding:11px 12px}
+.gate .btn{width:100%;padding:11px 14px;margin-top:6px}
+.err{color:var(--bad);font-size:.9rem;min-height:1.3em;margin:0}
 footer{max-width:1100px;margin:0 auto;padding:0 16px 24px;color:var(--muted);font-size:.85rem}
 </style>
 </head>
 <body>
+<div class="gate" id="gate" hidden>
+  <div class="band"><header>
+    <p class="brand">Instructor sign in</p>
+    <h1>School of Barbers <em>Tracking Sheet.</em></h1>
+    <p class="sub">Sign in to view and update your classes.</p>
+  </header></div>
+  <main>
+    <form class="panel" id="loginform" autocomplete="on">
+      <label for="lemail">Email</label>
+      <input type="email" id="lemail" autocomplete="username" required>
+      <label for="lpass">Password</label>
+      <input type="password" id="lpass" autocomplete="current-password" required>
+      <p class="err" id="lerr" role="alert"></p>
+      <button class="btn pri" type="submit">Sign in</button>
+    </form>
+  </main>
+</div>
 <div class="strip">Tool kits are due by the end of week 1</div>
 <div class="band"><header>
   <p class="brand">School of Barbers</p>
@@ -78,7 +106,8 @@ footer{max-width:1100px;margin:0 auto;padding:0 16px 24px;color:var(--muted);fon
 </header></div>
 <nav id="tabs" role="tablist"></nav>
 <main id="main"></main>
-<footer>Your class list is saved in this browser only, so it stays private to you. Use Setup &gt; Show as CSV to share a summary with your Student Success Manager.</footer>
+<footer>Class data syncs online for signed-in instructors. Use Setup &gt; Show as CSV to share a summary with your Student Success Manager.<br>
+<span id="who"></span> <button class="btn sm" id="signout" type="button" hidden>Sign out</button> <span id="syncst"></span></footer>
 <script>
 (function(){
 var KEY="barber-tracker-v1";
@@ -88,7 +117,66 @@ var STORE="https://store.schoolofbarbers.com.au/student?code=students-nd3bcbfftp
 var TABS=[["overview","Overview"],["attendance","Attendance"],["toolkit","Toolkit"],["reg","Registration"],["setup","Setup"]];
 var S=load(),tab="overview",flt="all",csv="",cur="all",pend="";
 function load(){try{var r=localStorage.getItem(KEY);if(r){var o=JSON.parse(r);if(o&&o.students)return migrate(o)}}catch(e){}return{classes:[],students:[],cd:{}}}
-function save(){try{localStorage.setItem(KEY,JSON.stringify(S))}catch(e){}}
+/* ---- Firebase sync ---- */
+var FB={apiKey:"AIzaSyCXaZrnMjt-jxMOOM3p4GT30twnYWYJTmo",authDomain:"sob-data-tracker.firebaseapp.com",projectId:"sob-data-tracker",appId:"1:717455286653:web:a5abc3d9705dee582dac14"};
+var ref=null,uidNow=null,unsub=null,timer=null,firstSnap=true;
+function cache(){try{localStorage.setItem(KEY,JSON.stringify(S))}catch(e){}}
+function save(){cache();push()}
+function setStatus(t){var e=document.getElementById("syncst");if(e)e.textContent=t}
+function push(){
+  if(!ref)return;
+  clearTimeout(timer);setStatus("Saving…");
+  timer=setTimeout(function(){
+    ref.set({json:JSON.stringify(S),by:uidNow,at:firebase.firestore.FieldValue.serverTimestamp()})
+      .then(function(){setStatus("Saved online")})
+      .catch(function(e){setStatus("Could not save online ("+e.code+")")});
+  },400);
+}
+function startCloud(){
+  var gate=document.getElementById("gate");
+  if(!window.firebase||!FB.apiKey||FB.apiKey.indexOf("PASTE")===0){setStatus("Local only: not synced yet");return}
+  firebase.initializeApp(FB);
+  var auth=firebase.auth(),db=firebase.firestore();
+  gate.hidden=false;
+  document.getElementById("loginform").addEventListener("submit",function(e){
+    e.preventDefault();
+    var er=document.getElementById("lerr");er.textContent="";
+    auth.signInWithEmailAndPassword(document.getElementById("lemail").value.trim(),document.getElementById("lpass").value)
+      .catch(function(x){er.textContent="Sign in failed. Check your email and password."});
+  });
+  document.getElementById("signout").addEventListener("click",function(){
+    clearTimeout(timer);
+    auth.signOut();
+  });
+  auth.onAuthStateChanged(function(u){
+    var so=document.getElementById("signout");
+    if(!u){
+      if(unsub){unsub();unsub=null;
+        /* signed out: wipe the local copy so student data isn't left on this device */
+        try{localStorage.removeItem(KEY)}catch(e){}
+        S={classes:[],students:[],cd:{}};cur="all";tab="overview";render();
+      }
+      ref=null;uidNow=null;so.hidden=true;document.getElementById("who").textContent="";
+      document.getElementById("lpass").value="";gate.hidden=false;return;
+    }
+    uidNow=u.uid;gate.hidden=true;so.hidden=false;document.getElementById("who").textContent=u.email;
+    ref=db.collection("tracker").doc("main");
+    setStatus("Connecting…");
+    unsub=ref.onSnapshot(function(snap){
+      if(snap.metadata.hasPendingWrites)return;
+      if(snap.exists){
+        try{var o=JSON.parse(snap.data().json);
+          if(o&&o.students){S=migrate(o);cache();render();setStatus("Synced")}
+        }catch(e){setStatus("Online data could not be read")}
+      }else{
+        if(snap.metadata.fromCache)return;
+        /* nothing online yet: upload whatever this browser already has */
+        if(S.students.length||S.classes.length)push();else setStatus("Synced")
+      }
+    },function(e){setStatus("Cannot read online data ("+e.code+")")});
+  });
+}
+/* ---- end Firebase sync ---- */
 function esc(t){return String(t==null?"":t).replace(/[&<>"]/g,function(c){return{"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]})}
 function uid(){return "s"+Math.random().toString(36).slice(2,9)}
 function today(){var d=new Date();return d.getFullYear()+"-"+("0"+(d.getMonth()+1)).slice(-2)+"-"+("0"+d.getDate()).slice(-2)}
@@ -233,6 +321,7 @@ document.addEventListener("change",function(e){
   save();render();
 });
 render();
+startCloud();
 })();
 </script>
 </body>
