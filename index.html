@@ -124,17 +124,17 @@ var S=load(),tab="overview",flt="all",csv="",cur="all",pend="",pflt="all",gsub="
 function load(){try{var r=localStorage.getItem(KEY);if(r){var o=JSON.parse(r);if(o&&o.students)return migrate(o)}}catch(e){}return{classes:[],students:[],cd:{}}}
 /* ---- Firebase sync ---- */
 var FB={apiKey:"AIzaSyCXaZrnMjt-jxMOOM3p4GT30twnYWYJTmo",authDomain:"sob-data-tracker.firebaseapp.com",projectId:"sob-data-tracker",appId:"1:717455286653:web:a5abc3d9705dee582dac14"};
-var ref=null,uidNow=null,unsub=null,timer=null,firstSnap=true;
+var ref=null,uidNow=null,unsub=null,timer=null,firstSnap=true,dirty=false;
 function cache(){try{localStorage.setItem(KEY,JSON.stringify(S))}catch(e){}}
 function save(){cache();push()}
 function setStatus(t){var e=document.getElementById("syncst");if(e)e.textContent=t}
 function push(){
   if(!ref)return;
-  clearTimeout(timer);setStatus("Saving…");
+  clearTimeout(timer);dirty=true;setStatus("Saving…");
   timer=setTimeout(function(){
     ref.set({json:JSON.stringify(S),by:uidNow,at:firebase.firestore.FieldValue.serverTimestamp()})
-      .then(function(){setStatus("Saved online")})
-      .catch(function(e){setStatus("Could not save online ("+e.code+")")});
+      .then(function(){dirty=false;setStatus("Saved online")})
+      .catch(function(e){dirty=false;setStatus("Could not save online ("+e.code+")")});
   },400);
 }
 function startCloud(){
@@ -168,10 +168,10 @@ function startCloud(){
     ref=db.collection("tracker").doc("main");
     setStatus("Connecting…");
     unsub=ref.onSnapshot(function(snap){
-      if(snap.metadata.hasPendingWrites)return;
+      if(snap.metadata.hasPendingWrites||dirty)return;
       if(snap.exists){
         try{var o=JSON.parse(snap.data().json);
-          if(o&&o.students){S=migrate(o);cache();var ae=document.activeElement;if(ae&&ae.closest&&ae.closest("#main")&&(ae.tagName==="TEXTAREA"||(ae.tagName==="INPUT"&&ae.type!=="checkbox")))later=true;else render();setStatus("Synced")}
+          if(o&&o.students&&snap.data().json!==JSON.stringify(S)){S=migrate(o);cache();var ae=document.activeElement;if(ae&&ae.closest&&ae.closest("#main")&&(ae.tagName==="TEXTAREA"||(ae.tagName==="INPUT"&&ae.type!=="checkbox")))later=true;else render();setStatus("Synced")}
         }catch(e){setStatus("Online data could not be read")}
       }else{
         if(snap.metadata.fromCache)return;
@@ -466,8 +466,8 @@ function toCsv(){
   return [head.map(q).join(",")].concat(rows).join("\n");
 }
 
-document.addEventListener("click",function(e){
-  var el=e.target.closest("[data-a]");if(!el)return;
+function onClick(e){
+  var el=e.target.closest("[data-a]");if(!el)return;later=false;
   var a=el.dataset.a,s=el.dataset.id?stud(el.dataset.id):null,d=el.dataset.d;
   var key=a+":"+(el.dataset.id||el.dataset.d||"");if(pend&&pend!==key)pend="";
   if(a==="tab"){tab=el.dataset.t}
@@ -504,7 +504,8 @@ document.addEventListener("click",function(e){
   else if(a==="reset"){if(!ask(key))return;S={classes:[],students:[],cd:{}};cur="all";csv=""}
   else return;
   save();render();
-});
+}
+document.addEventListener("click",function(e){try{onClick(e)}catch(x){setStatus("Error: "+x.message)}});
 document.addEventListener("change",function(e){
   var el=e.target.closest("[data-a]");if(!el)return;
   var a=el.dataset.a,s=el.dataset.id?stud(el.dataset.id):null;
@@ -533,7 +534,7 @@ document.addEventListener("change",function(e){
   save();
   if(el.tagName==="INPUT"&&el.type!=="checkbox")setTimeout(render,0);else render();
 });
-document.addEventListener("focusout",function(){if(later){later=false;setTimeout(render,50)}});
+document.addEventListener("focusout",function(){if(later)setTimeout(function(){if(later){later=false;render()}},400)});
 render();
 startCloud();
 })();
