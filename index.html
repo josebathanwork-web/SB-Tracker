@@ -53,7 +53,7 @@ th:first-child,td:first-child{text-align:left;position:sticky;left:0;background:
 th:first-child{background:var(--chip)}
 tr:last-child td{border-bottom:0}
 input[type=checkbox]{width:22px;height:22px;accent-color:var(--good);cursor:pointer}
-input[type=text],input[type=date],input[type=email],input[type=password],select,textarea{border:1px solid var(--line);background:var(--surface);border-radius:8px;padding:8px 10px;max-width:100%}
+input[type=text],input[type=date],input[type=email],input[type=password],input[type=number],select,textarea{border:1px solid var(--line);background:var(--surface);border-radius:8px;padding:8px 10px;max-width:100%}
 textarea{width:100%;min-height:110px}
 .cell{width:38px;height:34px;border-radius:7px;border:1px solid var(--line);background:var(--surface);font-weight:600;cursor:pointer}
 .cell.P{background:var(--goodbg);color:var(--good);border-color:var(--good)}
@@ -62,6 +62,11 @@ textarea{width:100%;min-height:110px}
 .tag{display:inline-block;padding:2px 8px;border-radius:999px;font-size:.8rem;font-weight:500;margin:1px 2px;background:var(--badbg);color:var(--bad)}
 .tag.w{background:var(--warnbg);color:var(--warn)}
 .tag.g{background:var(--goodbg);color:var(--good)}
+.tag.y{background:#fff1a8;color:#6b5600}
+.tag.o{background:#ffd8bd;color:#8a3d00}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]) .tag.y{background:#4a4210;color:#f5e27a}:root:not([data-theme="light"]) .tag.o{background:#4a2a10;color:#ffb27a}}
+:root[data-theme="dark"] .tag.y{background:#4a4210;color:#f5e27a}
+:root[data-theme="dark"] .tag.o{background:#4a2a10;color:#ffb27a}
 .muted{color:var(--muted)}
 .empty{padding:28px 16px;text-align:center;color:var(--muted)}
 .hint{color:var(--muted);font-size:.9rem;margin:0 0 10px}
@@ -114,8 +119,8 @@ var KEY="barber-tracker-v1";
 var REQ=[["clipper","Clipper and guards"],["trimmer","Trimmer"],["comb","Cutting comb"],["clips","Sectioning clips"],["scissors","Shears and thinning shears"],["spray","Spray bottle"],["brush","Fade brush"],["mannequin","Mannequin head and stand"]];
 var OPT=[["foil","Foil shaver"]];
 var STORE="https://store.schoolofbarbers.com.au/student?code=students-nd3bcbfftp";
-var TABS=[["overview","Overview"],["attendance","Attendance"],["toolkit","Toolkit"],["reg","Registration"],["setup","Setup"]];
-var S=load(),tab="overview",flt="all",csv="",cur="all",pend="";
+var TABS=[["overview","Overview"],["attendance","Attendance"],["toolkit","Toolkit"],["reg","Skool website registration"],["pay","Payments"],["grade","Grading & attention"],["concern","Concerns log"],["feedback","Student feedback"],["setup","Setup"]];
+var S=load(),tab="overview",flt="all",csv="",cur="all",pend="",pflt="all",gsub="attn",cflt="active",later=false,meEmail="";
 function load(){try{var r=localStorage.getItem(KEY);if(r){var o=JSON.parse(r);if(o&&o.students)return migrate(o)}}catch(e){}return{classes:[],students:[],cd:{}}}
 /* ---- Firebase sync ---- */
 var FB={apiKey:"AIzaSyCXaZrnMjt-jxMOOM3p4GT30twnYWYJTmo",authDomain:"sob-data-tracker.firebaseapp.com",projectId:"sob-data-tracker",appId:"1:717455286653:web:a5abc3d9705dee582dac14"};
@@ -159,14 +164,14 @@ function startCloud(){
       ref=null;uidNow=null;so.hidden=true;document.getElementById("who").textContent="";
       document.getElementById("lpass").value="";gate.hidden=false;return;
     }
-    uidNow=u.uid;gate.hidden=true;so.hidden=false;document.getElementById("who").textContent=u.email;
+    uidNow=u.uid;meEmail=u.email||"";gate.hidden=true;so.hidden=false;document.getElementById("who").textContent=u.email;
     ref=db.collection("tracker").doc("main");
     setStatus("Connecting…");
     unsub=ref.onSnapshot(function(snap){
       if(snap.metadata.hasPendingWrites)return;
       if(snap.exists){
         try{var o=JSON.parse(snap.data().json);
-          if(o&&o.students){S=migrate(o);cache();render();setStatus("Synced")}
+          if(o&&o.students){S=migrate(o);cache();var ae=document.activeElement;if(ae&&ae.closest&&ae.closest("#main")&&(ae.tagName==="TEXTAREA"||(ae.tagName==="INPUT"&&ae.type!=="checkbox")))later=true;else render();setStatus("Synced")}
         }catch(e){setStatus("Online data could not be read")}
       }else{
         if(snap.metadata.fromCache)return;
@@ -185,7 +190,7 @@ function kitCount(s){return REQ.filter(function(k){return s.kit&&s.kit[k[0]]}).l
 function rate(s){var m=0,a=0;Object.keys(s.att||{}).forEach(function(d){var v=s.att[d];if(v){m++;if(v!=="A")a++}});return m?Math.round(a/m*100):null}
 function pct(n,t){return t?Math.round(n/t*100):0}
 function stud(id){return S.students.filter(function(s){return s.id===id})[0]}
-function migrate(o){if(!o.classes){var c={id:"c"+uid(),name:o.cls||"Class 1"};o.classes=o.students.length?[c]:[];o.students.forEach(function(s){s.classId=c.id})}if(!o.cd){o.cd={};o.classes.forEach(function(c){o.cd[c.id]=(o.dates||[]).slice()})}return o}
+function migrate(o){if(!o.classes){var c={id:"c"+uid(),name:o.cls||"Class 1"};o.classes=o.students.length?[c]:[];o.students.forEach(function(s){s.classId=c.id})}if(!o.cd){o.cd={};o.classes.forEach(function(c){o.cd[c.id]=(o.dates||[]).slice()})}if(!o.concerns)o.concerns=[];if(!o.grading||o.grading.v!==2)o.grading=defG();return o}
 function cname(id){var c=S.classes.filter(function(x){return x.id===id})[0];return c?c.name:""}
 function vis(){return cur==="all"?S.students:S.students.filter(function(s){return s.classId===cur})}
 function tg(){return cur==="all"?S.classes.map(function(c){return c.id}):[cur]}
@@ -196,6 +201,8 @@ function ask(k){if(pend===k){pend="";return true}pend=k;render();return false}
 function bar(){return '<div class="row"><label for="clsel">Class</label><select id="clsel" data-a="clssel">'+[{id:"all",name:"All classes"}].concat(S.classes).map(function(c){var n=c.id==="all"?S.students.length:S.students.filter(function(s){return s.classId===c.id}).length;return '<option value="'+c.id+'"'+(cur===c.id?" selected":"")+'>'+esc(c.name)+' ('+n+')</option>'}).join("")+'</select></div>'}
 
 function render(){
+  var ae=document.activeElement,fsel="";
+  if(ae&&ae.closest&&ae.closest("#main")&&ae.tagName!=="BUTTON"){if(ae.dataset&&ae.dataset.a)fsel='[data-a="'+ae.dataset.a+'"]'+(ae.dataset.id?'[data-id="'+ae.dataset.id+'"]':"")+(ae.dataset.k?'[data-k="'+ae.dataset.k+'"]':"");else if(ae.id)fsel="#"+ae.id}
   var sc=[];document.querySelectorAll(".wrap").forEach(function(w){sc.push(w.scrollLeft)});
   document.getElementById("sub").textContent=(cur==="all"?"All classes":cname(cur))+" · "+vis().length+" student"+(vis().length===1?"":"s");
   document.getElementById("tabs").innerHTML=TABS.map(function(t){return '<button role="tab" data-a="tab" data-t="'+t[0]+'" aria-selected="'+(tab===t[0])+'">'+t[1]+'</button>'}).join("");
@@ -206,10 +213,15 @@ function render(){
   else if(tab==="attendance")h=vAttendance();
   else if(tab==="toolkit")h=vToolkit();
   else if(tab==="reg")h=vReg();
+  else if(tab==="pay")h=vPay();
+  else if(tab==="grade")h=vGrade();
+  else if(tab==="concern")h=vConcern();
+  else if(tab==="feedback")h=vFeedback();
   else h=vSetup();
   if(tab!=="setup"&&S.students.length&&vis().length)h=bar()+h;
   document.getElementById("main").innerHTML=h;
   document.querySelectorAll(".wrap").forEach(function(w,i){if(sc[i])w.scrollLeft=sc[i]});
+  if(fsel){var fe=document.querySelector("#main "+fsel);if(fe){try{fe.focus()}catch(x){}}}
 }
 
 function vOverview(){
@@ -219,18 +231,19 @@ function vOverview(){
   var rs=V.map(rate).filter(function(r){return r!==null});
   var avg=rs.length?Math.round(rs.reduce(function(a,b){return a+b},0)/rs.length):null;
   function card(v,l,p){return '<div class="stat"><b>'+v+'</b><span>'+l+'</span>'+(p==null?"":'<div class="bar"><i style="width:'+p+'%"></i></div>')+'</div>'}
-  var h='<div class="stats">'+card(reg+"/"+n,"Registered",pct(reg,n))+card(full+"/"+n,"Full required kit",pct(full,n))+card(shown+"/"+n,"Kit shown at week-1 check-in",pct(shown,n))+card(avg==null?"–":avg+"%","Average attendance",avg)+'</div>';
-  h+='<div class="row"><label for="flt">Show</label><select id="flt" data-a="flt">'+[["all","Everyone"],["noreg","Not registered"],["nokit","Kit incomplete"],["noshow","Kit not shown yet"],["low","Attendance below 80%"]].map(function(o){return '<option value="'+o[0]+'"'+(flt===o[0]?" selected":"")+'>'+o[1]+'</option>'}).join("")+'</select></div>';
+  var h='<div class="stats">'+card(reg+"/"+n,"Registered on Skool website",pct(reg,n))+card(full+"/"+n,"Full required kit",pct(full,n))+card(shown+"/"+n,"Kit shown at week-1 check-in",pct(shown,n))+card(avg==null?"–":avg+"%","Average attendance",avg)+card(V.filter(isOut).length+"/"+n,"Payments outstanding",null)+card(openCount(V),"Open concerns",null)+'</div>';
+  h+='<div class="row"><label for="flt">Show</label><select id="flt" data-a="flt">'+[["all","Everyone"],["noreg","Not registered on Skool website"],["nokit","Kit incomplete"],["noshow","Kit not shown yet"],["low","Attendance below 80%"]].map(function(o){return '<option value="'+o[0]+'"'+(flt===o[0]?" selected":"")+'>'+o[1]+'</option>'}).join("")+'</select></div>';
   var rows=V.filter(function(s){var r=rate(s);return flt==="all"||(flt==="noreg"&&!s.reg)||(flt==="nokit"&&kitCount(s)<REQ.length)||(flt==="noshow"&&!s.shown)||(flt==="low"&&r!==null&&r<80)});
   if(!rows.length)return h+'<div class="panel empty">Nobody matches this filter.</div>';
-  h+='<div class="wrap"><table><tr><th>Student</th>'+(cur==="all"?'<th>Class</th>':"")+'<th>Registered</th><th>Kit</th><th>Attendance</th><th>Needs attention</th></tr>';
+  h+='<div class="wrap"><table><tr><th>Student</th>'+(cur==="all"?'<th>Class</th>':"")+'<th>Skool registered</th><th>Kit</th><th>Attendance</th><th>Needs attention</th></tr>';
   rows.forEach(function(s){
     var k=kitCount(s),r=rate(s),f="";
     
-    if(!s.reg)f+='<span class="tag">Not registered</span>';
+    if(!s.reg)f+='<span class="tag">Not registered on Skool</span>';
     if(k<REQ.length)f+='<span class="tag w">Kit '+k+'/'+REQ.length+'</span>';
     else if(!s.shown)f+='<span class="tag w">Kit not shown</span>';
     if(r!==null&&r<80)f+='<span class="tag">Low attendance</span>';
+    xflags(s).forEach(function(x){f+='<span class="tag'+(x[1]?" "+x[1]:"")+'">'+esc(x[0])+'</span>'});
     if(!f)f='<span class="tag g">All good</span>';
     h+='<tr><td>'+esc(s.name)+'</td>'+(cur==="all"?'<td>'+esc(cname(s.classId))+'</td>':"")+'<td>'+(s.reg?"Yes":"No")+'</td><td>'+k+'/'+REQ.length+'</td><td>'+(r==null?"–":r+"%")+'</td><td style="text-align:left">'+f+'</td></tr>';
   });
@@ -260,9 +273,177 @@ function vToolkit(){
 }
 
 function vReg(){
-  var h='<div class="panel"><h2>Registration</h2><p class="hint">Tick each student once their registration is confirmed. This is a manual record and is not connected to any website.</p></div>';
-  h+='<div class="wrap"><table><tr><th>Student</th><th>Registered</th></tr>';
-  vis().forEach(function(s){h+='<tr><td>'+esc(s.name)+'</td><td><input type="checkbox" data-a="reg" data-id="'+s.id+'"'+(s.reg?" checked":"")+' aria-label="'+esc(s.name)+': registered"></td></tr>'});
+  var h='<div class="panel"><h2>Skool website registration</h2><p class="hint">Tick each student once they are registered on the Skool website. This is a manual record and is not connected to Skool.</p></div>';
+  h+='<div class="wrap"><table><tr><th>Student</th><th>Registered on Skool</th></tr>';
+  vis().forEach(function(s){h+='<tr><td>'+esc(s.name)+'</td><td><input type="checkbox" data-a="reg" data-id="'+s.id+'"'+(s.reg?" checked":"")+' aria-label="'+esc(s.name)+': registered on Skool website"></td></tr>'});
+  return h+'</table></div>';
+}
+
+/* ---- shared helpers for payments, grading and concerns ---- */
+var PSTAT=[["","–"],["paid","Paid"],["part","Part-paid"],["owing","Owing"]];
+var PITEMS=[["toolkit","Toolkit"],["tuition","Training (tuition fee)"]];
+var CCAT=["Attendance","Wellbeing","Behaviour","Academic / skills","Payment","Safety","Other"];
+var CSEV=[["low","Low"],["med","Medium"],["high","High"]];
+var CSTAT=[["open","Open"],["escalated","Escalated"],["resolved","Resolved"]];
+function defG(){return{v:2,pass:70,threshold:3,criteria:["Health, Safety & Hygiene","Client Consultation","Hair Growth Patterns","Head Shape & Haircut Structure","Graduation Techniques","Clipper & Fading Techniques","Hair Types","Customer Service"].map(function(n,i){return{id:"c"+(i+1),name:n}})}}
+function grd(){if(!S.grading||S.grading.v!==2)S.grading=defG();return S.grading}
+function CL(){if(!S.concerns)S.concerns=[];return S.concerns}
+function money(n){return "$"+(+n||0).toLocaleString("en-AU",{minimumFractionDigits:2,maximumFractionDigits:2})}
+function opts(list,sel){return list.map(function(o){return '<option value="'+esc(o[0])+'"'+(String(o[0])===String(sel)?" selected":"")+'>'+esc(o[1])+'</option>'}).join("")}
+function sc2(v,l){return '<div class="stat"><b>'+v+'</b><span>'+l+'</span></div>'}
+function pay(s,k){return (s.pay&&s.pay[k])||{st:"",amt:""}}
+function isOutItem(s,k){var st=pay(s,k).st;return st==="owing"||st==="part"}
+function isOut(s){return PITEMS.some(function(p){return isOutItem(s,p[0])})}
+function owed(s,k){return isOutItem(s,k)?(+pay(s,k).amt||0):0}
+function owedTotal(s){return owed(s,"toolkit")+owed(s,"tuition")}
+function pstLabel(s,k){var st=pay(s,k).st,f=PSTAT.filter(function(p){return p[0]===st})[0];return st&&f?f[1]:""}
+function gavg(s){var v=grd().criteria.map(function(c){return s.grades?+s.grades[c.id]:NaN}).filter(function(x){return x>=1});return v.length?v.reduce(function(a,b){return a+b},0)/v.length:null}
+function openCount(V){var ids={};V.forEach(function(s){ids[s.id]=1});return CL().filter(function(c){return ids[c.studentId]&&c.status!=="resolved"}).length}
+function xflags(s){
+  var f=[],G=grd(),a=gavg(s);
+  if(a!==null&&a<G.threshold)f.push(["Grade average "+a.toFixed(1),""]);
+  var low=G.criteria.filter(function(c){return s.grades&&+s.grades[c.id]===1});
+  if(low.length)f.push(["Scored 1: "+low.map(function(c){return c.name}).join(", "),"w"]);
+  var bad=SCI.filter(function(x){var v=s.sc&&s.sc[x[0]];return v!==undefined&&v!==""&&+v<(grd().pass||70)});if(bad.length)f.push(["Below pass mark: "+bad.map(function(x){return x[1]}).join(", "),"o"]);
+  if(s.flag)f.push(["Flagged by instructor","w"]);
+  var oc=CL().filter(function(c){return c.studentId===s.id&&c.status!=="resolved"});
+  if(oc.length){var ri=oc.map(function(c){return rinfo(rk(c))}).sort(function(a,b){return a[3]-b[3]})[0];f.push([ri[1]+" risk: "+oc.length+" open concern"+(oc.length>1?"s":""),ri[2]])}
+  if(isOut(s))f.push(["Payment outstanding","w"]);
+  return f;
+}
+function tags(list){return list.map(function(x){return '<span class="tag'+(x[1]?" "+x[1]:"")+'">'+esc(x[0])+'</span>'}).join("")}
+
+/* ---- Outstanding payments ---- */
+function vPay(){
+  var V=vis(),n=V.length,out=V.filter(isOut);
+  var tk=V.reduce(function(a,s){return a+owed(s,"toolkit")},0),tu=V.reduce(function(a,s){return a+owed(s,"tuition")},0);
+  var h='<div class="panel"><h2>Outstanding payments</h2><p class="hint">Record the toolkit and training (tuition fee) payments for each student. Choose Part-paid or Owing and enter the amount still owing. This is a manual record and is not connected to any payment system.</p></div>';
+  h+='<div class="stats">'+sc2(out.length+"/"+n,"Students with payments outstanding")+sc2(money(tk+tu),"Total outstanding")+sc2(money(tk),"Toolkit outstanding")+sc2(money(tu),"Training (tuition) outstanding")+'</div>';
+  h+='<div class="row"><label for="pflt">Show</label><select id="pflt" data-a="pflt">'+opts([["all","Everyone"],["out","Any payment outstanding"],["toolkit","Toolkit outstanding"],["tuition","Training (tuition) outstanding"],["clear","Nothing outstanding"]],pflt)+'</select></div>';
+  var rows=V.filter(function(s){return pflt==="all"||(pflt==="out"&&isOut(s))||(pflt==="toolkit"&&isOutItem(s,"toolkit"))||(pflt==="tuition"&&isOutItem(s,"tuition"))||(pflt==="clear"&&!isOut(s))});
+  if(!rows.length)return h+'<div class="panel empty">Nobody matches this filter.</div>';
+  h+='<div class="wrap"><table><tr><th>Student</th>'+(cur==="all"?'<th>Class</th>':"")+'<th>Toolkit</th><th>Toolkit owing ($)</th><th>Training (tuition)</th><th>Training owing ($)</th><th>Total owing</th><th>Note</th></tr>';
+  rows.forEach(function(s){
+    h+='<tr><td>'+esc(s.name)+'</td>'+(cur==="all"?'<td>'+esc(cname(s.classId))+'</td>':"");
+    PITEMS.forEach(function(p){
+      var it=pay(s,p[0]);
+      h+='<td><select data-a="paystat" data-id="'+s.id+'" data-k="'+p[0]+'" aria-label="'+esc(s.name)+': '+p[1]+' status">'+opts(PSTAT,it.st)+'</select></td>';
+      h+='<td><input type="number" min="0" step="0.01" data-a="payamt" data-id="'+s.id+'" data-k="'+p[0]+'" value="'+esc(it.amt)+'" style="width:100px" aria-label="'+esc(s.name)+': '+p[1]+' amount owing"></td>';
+    });
+    var t=owedTotal(s);
+    h+='<td>'+(t>0?'<span class="tag w">'+money(t)+'</span>':'<span class="muted">–</span>')+'</td>';
+    h+='<td><input type="text" data-a="paynote" data-id="'+s.id+'" value="'+esc(s.paynote||"")+'" placeholder="e.g. payment plan" style="width:190px" aria-label="'+esc(s.name)+': payment note"></td></tr>';
+  });
+  return h+'</table></div>';
+}
+
+/* ---- Grading and students who need attention (temporary template) ---- */
+function attn(s){var f=[],r=rate(s);if(r!==null&&r<80)f.push(["Low attendance "+r+"%",""]);return f.concat(xflags(s))}
+function vGradeOld(){
+  var V=vis(),n=V.length,G=grd(),C=G.criteria;
+  var avs=V.map(gavg).filter(function(x){return x!==null});
+  var mean=avs.length?avs.reduce(function(a,b){return a+b},0)/avs.length:null;
+  var need=V.map(function(s){return{s:s,f:attn(s)}}).filter(function(x){return x.f.length}).sort(function(a,b){return b.f.length-a.f.length});
+  var h='<div class="panel"><h2>Grading and students who need attention</h2><p class="hint">Attention rules are a starting point. Adjust the threshold under Topics to revise.</p></div>';
+  h+='<div class="stats">'+'<div class="stat"><b>'+avs.length+'/'+n+'</b><span>Students graded</span><div class="bar"><i style="width:'+pct(avs.length,n)+'%"></i></div></div>'+sc2(mean===null?"–":mean.toFixed(1)+" / 5","Average grade")+sc2(need.length,"Need attention")+'</div>';
+  h+='<div class="panel"><h2>Students who need attention</h2>';
+  if(!need.length)h+='<p class="muted" style="margin:0">Nobody needs attention right now.</p></div>';
+  else{
+    h+='<div class="wrap"><table><tr><th>Student</th>'+(cur==="all"?'<th>Class</th>':"")+'<th>Why</th></tr>';
+    need.forEach(function(x){h+='<tr><td>'+esc(x.s.name)+'</td>'+(cur==="all"?'<td>'+esc(cname(x.s.classId))+'</td>':"")+'<td style="text-align:left;white-space:normal">'+tags(x.f)+'</td></tr>'});
+    h+='</table></div></div>';
+  }
+  h+='<div class="panel"><h2>Grades</h2><p class="hint">Scale: 1 = needs significant support, 3 = meeting expectations, 5 = excellent. Tick Flag to add a student to the attention list yourself.</p></div>';
+  var sel=[["","–"],["1","1"],["2","2"],["3","3"],["4","4"],["5","5"]];
+  h+='<div class="wrap"><table><tr><th>Student</th>'+C.map(function(c){return '<th>'+esc(c.name)+'</th>'}).join("")+'<th>Average</th><th>Flag</th><th>Note</th></tr>';
+  V.forEach(function(s){
+    var a=gavg(s);
+    h+='<tr><td>'+esc(s.name)+'</td>'+C.map(function(c){return '<td><select data-a="grade" data-id="'+s.id+'" data-k="'+c.id+'" aria-label="'+esc(s.name)+': '+esc(c.name)+'">'+opts(sel,s.grades&&s.grades[c.id]?s.grades[c.id]:"")+'</select></td>'}).join("");
+    h+='<td>'+(a===null?'<span class="muted">–</span>':'<span class="tag '+(a<G.threshold?"":"g")+'">'+a.toFixed(1)+'</span>')+'</td>';
+    h+='<td><input type="checkbox" data-a="flag" data-id="'+s.id+'"'+(s.flag?" checked":"")+' aria-label="'+esc(s.name)+': flag for attention"></td>';
+    h+='<td><input type="text" data-a="gnote" data-id="'+s.id+'" value="'+esc(s.gnote||"")+'" placeholder="Short note" style="width:200px" aria-label="'+esc(s.name)+': grading note"></td></tr>';
+  });
+  h+='</table></div>';
+  h+='<div class="panel" style="margin-top:14px"><h2>Topics to revise</h2><p class="hint">Rename, add or remove topics if the list changes.</p>';
+  h+=C.map(function(c){return '<div class="row" style="margin-bottom:4px"><input type="text" data-a="gname" data-id="'+c.id+'" value="'+esc(c.name)+'" aria-label="Criterion name" style="flex:1"><button class="btn sm'+(pend==="gdel:"+c.id?" danger":"")+'" data-a="gdel" data-id="'+c.id+'">'+(pend==="gdel:"+c.id?"Confirm":"Remove")+'</button></div>'}).join("");
+  h+='<div class="row"><input type="text" id="newcrit" placeholder="e.g. Cutting accuracy"><button class="btn pri" data-a="gadd">Add criterion</button></div>';
+  h+='<div class="row"><label for="gthr">Flag a student when their average is below</label><input type="number" id="gthr" data-a="gthr" min="1" max="5" step="0.1" value="'+G.threshold+'" style="width:80px"></div>';
+  h+='<p class="hint">Students also appear in the attention list when any criterion is scored 1, attendance is below 80%, they have an open concern, or a payment is outstanding.</p></div>';
+  return h;
+}
+
+/* ---- Student concerns and escalation log ---- */
+function cvis(){return CL().filter(function(c){var st=stud(c.studentId);return st?(cur==="all"||st.classId===cur):cur==="all"})}
+var WT=[["w1","Test 1"],["w2","Test 2"],["w3","Test 3"],["w4","Test 4"]];
+var FE=[["f1","Tools Identification"],["f2","Sanitisation"],["f3","Types of Fades"],["f4","Anatomy"],["f5","Consultation"],["f6","Fading Process"]];
+var SCI=WT.concat(FE);
+function savg(s,L){var v=L.map(function(x){return s.sc?s.sc[x[0]]:""}).filter(function(x){return x!==""&&x!==undefined&&!isNaN(+x)}).map(Number);return v.length?v.reduce(function(a,b){return a+b},0)/v.length:null}
+function vScores(L,title,hint){
+  var V=vis(),pm=grd().pass||70,h='<div class="panel"><h2>'+title+'</h2><p class="hint">'+hint+' Scores are percentages (0 to 100). Pass mark: '+pm+'% (change it under Pass / Mark / Retake).</p></div>';
+  h+='<div class="wrap"><table><tr><th>Student</th>'+L.map(function(x){return '<th>'+x[1]+'</th>'}).join("")+'<th>Average</th></tr>';
+  V.forEach(function(s){var a=savg(s,L);h+='<tr><td>'+esc(s.name)+'</td>'+L.map(function(x){var v=s.sc&&s.sc[x[0]];return '<td><input type="number" min="0" max="100" data-a="sc" data-id="'+s.id+'" data-k="'+x[0]+'" value="'+esc(v==null?"":v)+'" style="width:72px" aria-label="'+esc(s.name)+': '+x[1]+'"></td>'}).join("")+'<td>'+(a===null?'<span class="muted">–</span>':'<span class="tag '+(a<pm?"":"g")+'">'+Math.round(a)+'%</span>')+'</td></tr>'});
+  return h+'</table></div>';
+}
+function vResults(){
+  var V=vis(),pm=grd().pass||70;
+  var h='<div class="panel"><h2>Pass / Mark / Retake</h2><p class="hint">The final mark is the average of the six final exam sections. The suggested result compares it with the pass mark. Choose the actual result for each student.</p><div class="row"><label for="gpass">Pass mark (%)</label><input type="number" id="gpass" data-a="gpass" min="0" max="100" value="'+pm+'" style="width:80px"></div></div>';
+  h+='<div class="wrap"><table><tr><th>Student</th><th>Written tests average</th><th>Final exam mark</th><th>Suggested</th><th>Result</th></tr>';
+  V.forEach(function(s){var t=savg(s,WT),f=savg(s,FE);h+='<tr><td>'+esc(s.name)+'</td><td>'+(t===null?"–":Math.round(t)+"%")+'</td><td>'+(f===null?"–":Math.round(f)+"%")+'</td><td>'+(f===null?"–":f>=pm?"Pass":"Retake")+'</td><td><select data-a="res" data-id="'+s.id+'" aria-label="'+esc(s.name)+': result">'+opts([["","–"],["pass","Pass"],["retake","Retake"]],s.res||"")+'</select></td></tr>'});
+  return h+'</table></div>';
+}
+function vGrade(){
+  var subs=[["attn","Attention"],["topics","Topics to revise"],["tests","Written tests"],["final","Final exam"],["result","Pass / Mark / Retake"]];
+  var h='<div class="subtabs">'+subs.map(function(x){return '<button data-a="gsub" data-t="'+x[0]+'" aria-selected="'+(gsub===x[0])+'">'+x[1]+'</button>'}).join("")+'</div>';
+  if(gsub==="tests")return h+vScores(WT,"Written exams","Enter each student's score for Test 1 to Test 4.");
+  if(gsub==="final")return h+vScores(FE,"Final exam","Enter the score for each of the six sections.");
+  if(gsub==="result")return h+vResults();
+  var all=vGradeOld(),i=all.indexOf('<div class="panel"><h2>Grades</h2>');
+  return h+(gsub==="attn"?all.slice(0,i):all.slice(i));
+}
+
+/* ---- Concerns log, based on SOP 3: at-risk student intervention ---- */
+var RISK=[["yellow","Yellow","y",2,"Text or chat within 2 business days"],["orange","Orange","o",1,"Sit-down within 1 business day; written success plan"],["red","Red","",0,"Same-day contact; loop in Director; success plan + weekly follow-up"]];
+var RFL={yellow:["1 unexcused absence in a week","Late 3+ times in 2 weeks","Check-in score 5–6","Educator notes low engagement"],orange:["2+ absences in a week","5%+ behind on hours pace","Failed practical/written exam","Mentions money, childcare or transport problems"],red:["3+ consecutive absences or no contact","10%+ behind on pace","Says they want to quit","Approaching SAP or attendance-policy limits","Crisis (health, housing, safety)"]};
+function rinfo(k){return RISK.filter(function(r){return r[0]===k})[0]||RISK[0]}
+function rk(c){return c.risk||({high:"red",med:"orange",low:"yellow"}[c.sev])||"yellow"}
+function addBiz(d,n){var p=d.split("-"),t=new Date(+p[0],+p[1]-1,+p[2]);while(n>0){t.setDate(t.getDate()+1);if(t.getDay()%6)n--}return t.getFullYear()+"-"+("0"+(t.getMonth()+1)).slice(-2)+"-"+("0"+t.getDate()).slice(-2)}
+function sn(c){var st=stud(c.studentId);return esc(st?st.name:(c.sname||"Unknown")+" (removed)")}
+function stOpts(){return vis().map(function(s){return '<option value="'+s.id+'">'+esc(s.name)+(cur==="all"?' ('+esc(cname(s.classId))+')':"")+'</option>'}).join("")}
+function vConcern(){
+  var all=cvis(),h='<div class="panel"><h2>Student concerns and escalation log</h2><p class="hint">Based on SOP 3: at-risk student intervention. Tick every early-alert flag that applies. The risk level is the highest one ticked, and the SSM response deadline is set from it. Keep notes factual and brief.</p>';
+  h+='<div class="row"><label for="cstud">Student</label><select id="cstud">'+stOpts()+'</select><label for="cdate">Date</label><input type="date" id="cdate" value="'+today()+'"><label for="csrc">Raised by</label><select id="csrc">'+["SSM Monday review","Educator","Front desk","Other"].map(function(x){return '<option>'+x+'</option>'}).join("")+'</select></div>';
+  RISK.forEach(function(r){h+='<div class="panel" style="padding:10px;margin-bottom:8px"><span class="tag '+r[2]+'">'+r[1]+'</span> <span class="muted">'+r[4]+'</span><div class="row" style="margin:8px 0 0">'+RFL[r[0]].map(function(f,i){return '<label style="display:flex;gap:6px;align-items:center"><input type="checkbox" name="cflag" value="'+r[0]+':'+i+'">'+f+'</label>'}).join("")+'</div></div>'});
+  h+='<label for="cdesc" class="hint" style="display:block">Notes (what happened)</label><textarea id="cdesc" placeholder="Brief, factual description"></textarea>';
+  h+='<div class="row" style="margin-top:8px"><label for="clvl">Risk level</label><select id="clvl"><option value="">Auto from flags</option>'+opts(RISK.map(function(r){return [r[0],r[1]]}),"")+'</select><button class="btn pri" data-a="addconcern">Log concern</button><span class="err" id="cerr"></span></div></div>';
+  var un=all.filter(function(c){return c.status!=="resolved"}),od=un.filter(function(c){return c.due&&!c.resp&&c.due<today()}).length;
+  h+='<div class="stats">'+RISK.slice().reverse().map(function(r){return sc2(un.filter(function(c){return rk(c)===r[0]}).length,r[1]+" (unresolved)")}).join("")+sc2(od,"SSM response overdue")+sc2(all.length-un.length,"Resolved")+'</div>';
+  h+='<div class="row"><label for="cflt">Show</label><select id="cflt" data-a="cflt">'+opts([["active","Open and escalated"],["all","All"],["resolved","Resolved only"]],cflt)+'</select></div>';
+  var rows=all.filter(function(c){return cflt==="all"||(cflt==="active"&&c.status!=="resolved")||(cflt==="resolved"&&c.status==="resolved")}).sort(function(a,b){return (b.date||"").localeCompare(a.date||"")||(b.at||0)-(a.at||0)});
+  if(!rows.length)return h+'<div class="panel empty">'+(all.length?"Nothing matches this filter.":"No concerns logged yet.")+'</div>';
+  h+='<div class="wrap"><table><tr><th>Student</th><th>Logged</th><th>Risk</th><th>Flags</th><th>Raised by</th><th>Notes</th><th>SSM response due</th><th>Contacted</th><th>Success plan</th><th>Director looped in</th><th>Next follow-up</th><th>Status</th><th>Outcome</th><th>Logged by</th><th></th></tr>';
+  rows.forEach(function(c){
+    var ri=rinfo(rk(c)),late=c.due&&!c.resp&&c.due<today()&&c.status!=="resolved",wr='white-space:normal;min-width:200px;text-align:left';
+    var cb=function(f,l){return '<td><input type="checkbox" data-a="cf2" data-f="'+f+'" data-id="'+c.id+'"'+(c[f]?" checked":"")+' aria-label="'+l+'"></td>'};
+    h+='<tr><td>'+sn(c)+'</td><td>'+(c.date?fmt(c.date):"–")+'</td><td><span class="tag '+ri[2]+'">'+ri[1]+'</span></td><td style="'+wr+'">'+esc((c.flags&&c.flags.length?c.flags.join("; "):c.cat)||"")+'</td><td>'+esc(c.src||"")+'</td><td style="'+wr+'">'+esc(c.desc||"")+'</td>';
+    h+='<td>'+(c.due?fmt(c.due)+(late?' <span class="tag">Overdue</span>':""):"–")+'</td>'+cb("resp","SSM contacted student")+cb("plan","Success plan written")+cb("dir","Director looped in");
+    h+='<td><input type="date" data-a="cf2" data-f="fu" data-id="'+c.id+'" value="'+esc(c.fu||"")+'" aria-label="Next follow-up"></td>';
+    h+='<td><select data-a="cf2" data-f="status" data-id="'+c.id+'" aria-label="Status">'+opts(CSTAT,c.status)+'</select></td>';
+    h+='<td><input type="text" data-a="cf2" data-f="outcome" data-id="'+c.id+'" value="'+esc(c.outcome||"")+'" placeholder="Outcome or next step" style="width:200px" aria-label="Outcome"></td><td class="muted">'+esc(c.by||"")+'</td>';
+    h+='<td><button class="btn sm'+(pend==="cdel:"+c.id?" danger":"")+'" data-a="cdel" data-id="'+c.id+'" aria-label="Delete concern">'+(pend==="cdel:"+c.id?"Confirm":"×")+'</button></td></tr>';
+  });
+  return h+'</table></div>';
+}
+
+/* ---- Student feedback ---- */
+function vFeedback(){
+  var F=(S.feedback=S.feedback||[]).filter(function(f){var st=stud(f.studentId);return st?(cur==="all"||st.classId===cur):cur==="all"}).sort(function(a,b){return (b.date||"").localeCompare(a.date||"")||(b.at||0)-(a.at||0)});
+  var h='<div class="panel"><h2>Student feedback</h2><p class="hint">Record feedback a student gives you, or feedback you give a student.</p>';
+  h+='<div class="row"><label for="fstud">Student</label><select id="fstud">'+stOpts()+'</select><label for="fdate">Date</label><input type="date" id="fdate" value="'+today()+'"><label for="ftype">Type</label><select id="ftype">'+opts([["from","From the student"],["to","To the student"]],"from")+'</select></div>';
+  h+='<div class="row"><label for="farea">Topic</label><select id="farea"><option>General</option>'+grd().criteria.map(function(c){return '<option>'+esc(c.name)+'</option>'}).join("")+'</select><label for="frate">Rating</label><select id="frate">'+opts([["","–"],["1","1"],["2","2"],["3","3"],["4","4"],["5","5"]],"")+'</select></div>';
+  h+='<label for="ftext" class="hint" style="display:block">Feedback (required)</label><textarea id="ftext"></textarea><div class="row" style="margin-top:8px"><button class="btn pri" data-a="addfb">Save feedback</button></div></div>';
+  if(!F.length)return h+'<div class="panel empty">No feedback recorded yet.</div>';
+  h+='<div class="wrap"><table><tr><th>Student</th><th>Date</th><th>Type</th><th>Topic</th><th>Rating</th><th>Feedback</th><th>By</th><th></th></tr>';
+  F.forEach(function(f){h+='<tr><td>'+sn(f)+'</td><td>'+(f.date?fmt(f.date):"–")+'</td><td>'+(f.type==="to"?"To student":"From student")+'</td><td>'+esc(f.area||"")+'</td><td>'+esc(f.rate||"–")+'</td><td style="white-space:normal;min-width:260px;text-align:left">'+esc(f.text)+'</td><td class="muted">'+esc(f.by||"")+'</td><td><button class="btn sm'+(pend==="fbdel:"+f.id?" danger":"")+'" data-a="fbdel" data-id="'+f.id+'" aria-label="Delete feedback">'+(pend==="fbdel:"+f.id?"Confirm":"×")+'</button></td></tr>'});
   return h+'</table></div>';
 }
 
@@ -278,9 +459,9 @@ function vSetup(){
 
 function toCsv(){
   var q=function(v){v=String(v==null?"":v);return /[",\n]/.test(v)?'"'+v.replace(/"/g,'""')+'"':v};
-  var head=["Name","Class","Registered"].concat(REQ.concat(OPT).map(function(k){return k[1]}),["Kit shown at check-in","Attendance %"],alld());
+  var head=["Name","Class","Registered on Skool website"].concat(REQ.concat(OPT).map(function(k){return k[1]}),["Kit shown at check-in","Attendance %","Toolkit payment","Toolkit owing ($)","Tuition payment","Tuition owing ($)","Grade average","Flagged for attention","Open concerns"],alld());
   var rows=S.students.map(function(s){
-    return [s.name,cname(s.classId),s.reg?"Yes":"No"].concat(REQ.concat(OPT).map(function(k){return s.kit&&s.kit[k[0]]?"Yes":"No"}),[s.shown?"Yes":"No",rate(s)==null?"":rate(s)],alld().map(function(d){return (s.att&&s.att[d])||""})).map(q).join(",");
+    return [s.name,cname(s.classId),s.reg?"Yes":"No"].concat(REQ.concat(OPT).map(function(k){return s.kit&&s.kit[k[0]]?"Yes":"No"}),[s.shown?"Yes":"No",rate(s)==null?"":rate(s),pstLabel(s,"toolkit"),owed(s,"toolkit"),pstLabel(s,"tuition"),owed(s,"tuition"),gavg(s)==null?"":gavg(s).toFixed(1),s.flag?"Yes":"No",CL().filter(function(c){return c.studentId===s.id&&c.status!=="resolved"}).length],alld().map(function(d){return (s.att&&s.att[d])||""})).map(q).join(",");
   });
   return [head.map(q).join(",")].concat(rows).join("\n");
 }
@@ -302,6 +483,23 @@ document.addEventListener("click",function(e){
     lines.forEach(function(l){l=l.trim();if(!l)return;S.students.push({id:uid(),name:l,classId:cid,shown:false,kit:{},att:{}})});
   }
   else if(a==="rm"&&s){if(!ask(key))return;S.students=S.students.filter(function(x){return x.id!==s.id})}
+  else if(a==="addconcern"){
+    var sid=document.getElementById("cstud").value,lv=document.getElementById("clvl").value,fl=[].slice.call(document.querySelectorAll("input[name=cflag]:checked")).map(function(x){return x.value});
+    if(!sid||(!fl.length&&!lv)){document.getElementById("cerr").textContent="Tick at least one flag or choose a risk level.";return}
+    fl.forEach(function(v){var r=v.split(":")[0];if(!lv||rinfo(r)[3]<rinfo(lv)[3])lv=r});
+    var dt=document.getElementById("cdate").value||today(),st0=stud(sid);
+    CL().push({id:"n"+uid(),studentId:sid,sname:st0?st0.name:"",date:dt,risk:lv,flags:fl.map(function(v){var p=v.split(":");return RFL[p[0]][+p[1]]}),src:document.getElementById("csrc").value,desc:document.getElementById("cdesc").value.trim(),due:addBiz(dt,rinfo(lv)[3]),status:lv==="red"?"escalated":"open",outcome:"",by:meEmail,at:Date.now()});
+  }
+  else if(a==="addfb"){
+    var fs=document.getElementById("fstud").value,ft=document.getElementById("ftext").value.trim();
+    if(!fs||!ft)return;
+    var st1=stud(fs);(S.feedback=S.feedback||[]).push({id:"f"+uid(),studentId:fs,sname:st1?st1.name:"",date:document.getElementById("fdate").value||today(),type:document.getElementById("ftype").value,area:document.getElementById("farea").value,rate:document.getElementById("frate").value,text:ft,by:meEmail,at:Date.now()});
+  }
+  else if(a==="fbdel"){var fid=el.dataset.id;if(!ask(key))return;S.feedback=(S.feedback||[]).filter(function(f){return f.id!==fid})}
+  else if(a==="gsub"){gsub=el.dataset.t}
+  else if(a==="cdel"){var cid2=el.dataset.id;if(!ask(key))return;S.concerns=CL().filter(function(c){return c.id!==cid2})}
+  else if(a==="gadd"){var cn=document.getElementById("newcrit").value.trim();if(!cn)return;grd().criteria.push({id:"g"+uid(),name:cn})}
+  else if(a==="gdel"){var gid=el.dataset.id;if(!ask(key))return;grd().criteria=grd().criteria.filter(function(c){return c.id!==gid})}
   else if(a==="csv"){csv=toCsv()}
   else if(a==="reset"){if(!ask(key))return;S={classes:[],students:[],cd:{}};cur="all";csv=""}
   else return;
@@ -316,10 +514,26 @@ document.addEventListener("change",function(e){
   else if(a==="mv"&&s){s.classId=el.value}
   else if(a==="clssel"){cur=el.value}
   else if(a==="rncls"){var rc=S.classes.filter(function(c){return c.id===el.dataset.id})[0];if(rc&&el.value.trim())rc.name=el.value.trim()}
+  else if(a==="paystat"&&s){s.pay=s.pay||{};var pk=el.dataset.k;s.pay[pk]=s.pay[pk]||{st:"",amt:""};s.pay[pk].st=el.value}
+  else if(a==="payamt"&&s){s.pay=s.pay||{};var pk2=el.dataset.k;s.pay[pk2]=s.pay[pk2]||{st:"",amt:""};s.pay[pk2].amt=el.value}
+  else if(a==="paynote"&&s){s.paynote=el.value.trim()}
+  else if(a==="grade"&&s){s.grades=s.grades||{};if(el.value)s.grades[el.dataset.k]=+el.value;else delete s.grades[el.dataset.k]}
+  else if(a==="flag"&&s){s.flag=el.checked}
+  else if(a==="gnote"&&s){s.gnote=el.value.trim()}
+  else if(a==="gname"){var gc=grd().criteria.filter(function(c){return c.id===el.dataset.id})[0];if(gc&&el.value.trim())gc.name=el.value.trim()}
+  else if(a==="gthr"){var tv=parseFloat(el.value);grd().threshold=isNaN(tv)?3:Math.min(5,Math.max(1,tv))}
+  else if(a==="cf2"){var cc=CL().filter(function(c){return c.id===el.dataset.id})[0];if(cc)cc[el.dataset.f]=el.type==="checkbox"?el.checked:el.value.trim()}
+  else if(a==="sc"&&s){s.sc=s.sc||{};s.sc[el.dataset.k]=el.value}
+  else if(a==="res"&&s){s.res=el.value}
+  else if(a==="gpass"){var pv=parseFloat(el.value);grd().pass=isNaN(pv)?70:Math.min(100,Math.max(0,pv))}
+  else if(a==="pflt"){pflt=el.value;render();return}
+  else if(a==="cflt"){cflt=el.value;render();return}
   else if(a==="flt"){flt=el.value;render();return}
   else return;
-  save();render();
+  save();
+  if(el.tagName==="INPUT"&&el.type!=="checkbox")setTimeout(render,0);else render();
 });
+document.addEventListener("focusout",function(){if(later){later=false;setTimeout(render,50)}});
 render();
 startCloud();
 })();
